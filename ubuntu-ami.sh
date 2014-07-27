@@ -6,7 +6,7 @@ fi
 RELEASE=$1
 ARCH=$2
 REGION=$3
-STORAGE=${STORAGE_TYPE:-ebs-ssd}
+STORAGE=${STORAGE:-ebs-ssd}
 VIRTUALIZATION=${VIRTUALIZATION:-paravirtual}
 
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/ubuntu-ami"
