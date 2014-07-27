@@ -3,19 +3,18 @@
 # Prerequisites: aws jq ssh
 KEY_NAME=aws # The Amazon name for the key-pair used
 KEY_LOCATION=~/.ssh/aws.pem # The local version of the private key
-DEFAULT_GROUP=server # Enables ssh access, which is disabled by default
-
+GROUP=${GROUP:-server} # Enables ssh access, which is disabled by default
 
 SSH_USER=ubuntu # Depends on the image. See http://docs.aws.amazon.com/AWSEC2/latest/UserGuide/AccessingInstancesLinux.html
 
-DEFAULT_REGION=us-west-1
-DEFAULT_ARCHITECTURE=amd64
-DEFAULT_INSTANCE_TYPE=t1.micro
-DEFAULT_WAIT_FOR_STATUS=terminated
+REGION=${REGION:-us-west-1}
+ARCHITECTURE=${ARCHITECTURE:-amd64}
+INSTANCE_TYPE=${INSTANCE_TYPE:-t1.micro}
+WAIT_FOR_STATUS=${WAIT_FOR_STATUS:-terminated}
 
 UBUNTU_AMI="$(dirname $0)/ubuntu-ami.sh"
-DEFAULT_IMAGE_ID=$("$UBUNTU_AMI" trusty $DEFAULT_ARCHITECTURE $DEFAULT_REGION)
-
+UBUNTU_IMAGE=$("$UBUNTU_AMI" trusty $ARCHITECTURE $REGION)
+IMAGE_ID=${IMAGE_ID:-$UBUNTU_IMAGE}
 
 usage() {
     echo "$0 list|ssh|start|terminate|terminate-all|help"
@@ -44,7 +43,7 @@ find_instance_by_ref() {
 
 create_instance() {
     TEMP_FILE=$(mktemp)
-    aws ec2 run-instances --image-id ${DEFAULT_IMAGE_ID} --count 1 --instance-type ${DEFAULT_INSTANCE_TYPE} --key-name ${KEY_NAME} --security-groups ${DEFAULT_GROUP} "$@" | tee ${TEMP_FILE} | cat >&2
+    aws ec2 run-instances --image-id ${IMAGE_ID} --count 1 --instance-type ${INSTANCE_TYPE} --key-name ${KEY_NAME} --security-groups ${GROUP} "$@" | tee ${TEMP_FILE} | cat >&2
     INSTANCE_ID=$(cat ${TEMP_FILE} | jq -r '.Instances[].InstanceId')
     rm ${TEMP_FILE}
     echo ${INSTANCE_ID}
@@ -128,7 +127,7 @@ case $subcommand in
         else
             usage; exit 1
         fi
-        INSTANCE_STATUS=$DEFAULT_WAIT_FOR_STATUS
+        INSTANCE_STATUS=$WAIT_FOR_STATUS
         if [ $# -gt 0 ]; then
             INSTANCE_STATUS=$1; shift 1
         fi
