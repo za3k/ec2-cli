@@ -70,7 +70,7 @@ case $subcommand in
     list)
         require_jq
         aws ec2 describe-instances --filters "Name=instance-state-name,Values=pending,running,stopped,stopping" "$@" | jq -r '.Reservations[].Instances[] | { id: .InstanceId, name: [.Tags[]? | select(.Key == "Name") | .Value][0]} | if .name then .name else .id end';;
-    start)
+    start) # INSTANCE-REFERENCE
         if [ $# -gt 0 ]; then
             INSTANCE_NAME="$1"; shift 1
         else
@@ -81,7 +81,7 @@ case $subcommand in
             name_instance ${INSTANCE_ID} ${INSTANCE_NAME}
         fi
         echo ${INSTANCE_ID};;
-    terminate|stop)
+    terminate|stop) # INSTANCE-REFERENCE
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
         else
@@ -93,7 +93,7 @@ case $subcommand in
     terminate-all|stop-all)
         set -e
         $0 list | xargs -n 1 $0 terminate;;
-    ssh)
+    ssh) # INSTANCE-REFERENCE [SSH-ARGS...]
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
         else
@@ -106,7 +106,18 @@ case $subcommand in
         INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
         set -x
         exec ssh ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} "$@";;
-    status)
+    ssh-parallel) # INSTANCE-REFERENCE
+        if [ $# -gt 0 ]; then
+            INSTANCE_REF="$1"; shift 1
+        else
+            usage; exit 1
+        fi
+        INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
+        #PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PublicDnsName')
+        PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" | jq -r '.Reservations[].Instances[].PublicIpAddress')
+        INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+        echo ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} "$@";;
+    status) # INSTANCE-REFERENCE
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
         else
@@ -121,7 +132,7 @@ case $subcommand in
             *)
                 exit 1;;
         esac;;
-    wait)
+    wait) # INSTANCE-REFERENCE [STATUS]
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
         else
@@ -139,7 +150,7 @@ case $subcommand in
         done
         echo " ready."
         exit 0;;
-    ip)
+    ip) # INSTANCE-REFERENCE
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
         else
@@ -148,15 +159,15 @@ case $subcommand in
         INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
         PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PublicIpAddress')
         echo $PUBLIC_IP;;
-    spinup)
-        if [ $# -gt 0 ]; then
-            COUNT="$1"; shift 1
+    start-group) # GROUP COUNT
+        if [ $# -gt 1 ]; then
+            PREFIX=$1
+            COUNT=$2; shift 2
         else
             usage; exit 1
         fi
-        PREFIX=${1:-remotemachine-}; shift
         EXISTING_MACHINES_FILE=$(mktemp)
-        "$0" list | egrep "^$PREFIX" | sort >${EXISTING_MACHINES_FILE}
+        "$0" list-group PREFIX >${EXISTING_MACHINES_FILE}
         EXISTING_MACHINES=$(cat ${EXISTING_MACHINES_FILE} | wc -l)
         echo "Existing: $EXISTING_MACHINES" >&2
         cat $EXISTING_MACHINES_FILE
@@ -177,9 +188,21 @@ case $subcommand in
         done
         rm ${CANDIDATE_NAMES} ${EXISTING_MACHINES_FILE} ${NAMES_TO_START} # cleanup
         ;;
-    spindown)
+    list-group) # GROUP
+        if [ $# -gt 0 ]; then
+            PREFIX=$1; shift 1
+        else
+            usage; exit 1
+        fi
+        "$0" list | egrep "^$PREFIX" | sort;;
+    stop-group) # GROUP
+        if [ $# -gt 0 ]; then
+            PREFIX=$1; shift 1
+        else
+            usage; exit 1
+        fi
         PREFIX=${1:-remotemachine}; shift
-        "$0" list | egrep "^$PREFIX" | while read INSTANCE_NAME; do
+        "$0" list-group | while read INSTANCE_NAME; do
             "$0" terminate "${INSTANCE_NAME}"
         done;;
     help)
