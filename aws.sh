@@ -106,17 +106,6 @@ case $subcommand in
         INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
         set -x
         exec ssh ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} "$@";;
-    ssh-parallel) # INSTANCE-REFERENCE
-        if [ $# -gt 0 ]; then
-            INSTANCE_REF="$1"; shift 1
-        else
-            usage; exit 1
-        fi
-        INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
-        #PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PublicDnsName')
-        PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" | jq -r '.Reservations[].Instances[].PublicIpAddress')
-        INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
-        echo ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} "$@";;
     status) # INSTANCE-REFERENCE
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
@@ -167,7 +156,7 @@ case $subcommand in
             usage; exit 1
         fi
         EXISTING_MACHINES_FILE=$(mktemp)
-        "$0" list-group PREFIX >${EXISTING_MACHINES_FILE}
+        "$0" list-group $PREFIX >${EXISTING_MACHINES_FILE}
         EXISTING_MACHINES=$(cat ${EXISTING_MACHINES_FILE} | wc -l)
         echo "Existing: $EXISTING_MACHINES" >&2
         cat $EXISTING_MACHINES_FILE
@@ -195,14 +184,30 @@ case $subcommand in
             usage; exit 1
         fi
         "$0" list | egrep "^$PREFIX" | sort;;
+    parallel) # GROUP [PARALLEL_ARGS...]
+        if [ $# -gt 0 ]; then
+            PREFIX=$1; shift 1
+        else
+            usage; exit 1
+        fi
+        SSH_CREDENTIALS=$(mktemp)
+        "$0" list-group $PREFIX | while read INSTANCE_REF; do
+            INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
+            PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" | jq -r '.Reservations[].Instances[].PublicIpAddress')
+            INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
+            echo ssh ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]}
+        done >${SSH_CREDENTIALS}
+        echo "SSH CREDENTIALS"
+        cat ${SSH_CREDENTIALS}
+        parallel --sshloginfile "${SSH_CREDENTIALS}" "$@"
+        rm ${SSH_CREDENTIALS};;
     stop-group) # GROUP
         if [ $# -gt 0 ]; then
             PREFIX=$1; shift 1
         else
             usage; exit 1
         fi
-        PREFIX=${1:-remotemachine}; shift
-        "$0" list-group | while read INSTANCE_NAME; do
+        "$0" list-group $PREFIX | while read INSTANCE_NAME; do
             "$0" terminate "${INSTANCE_NAME}"
         done;;
     help)
