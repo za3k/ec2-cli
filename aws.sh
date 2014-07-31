@@ -29,7 +29,7 @@ require_jq() {
 
 find_instance_by_name() {
     INSTANCE_NAME="$1"; shift 1
-    aws ec2 describe-instances --filters "Name=tag:Name,Values=${INSTANCE_NAME}" --filters="Name=instance-state-name,Values=pending,running" "$@" | jq -r '.Reservations[].Instances[].InstanceId'
+    aws ec2 describe-instances --filters "Name=tag:Name,Values=${INSTANCE_NAME}" "Name=instance-state-name,Values=pending,running" "$@" | jq -r '.Reservations[].Instances[].InstanceId'
 }
 find_instance_by_ref() {
     INSTANCE_REF="$1"; shift 1
@@ -101,11 +101,11 @@ case $subcommand in
         fi
         INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
         #PUBLIC_DNS=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PublicDnsName')
-        PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PublicIpAddress')
+        PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" | jq -r '.Reservations[].Instances[].PublicIpAddress')
         echo "SSHing into $PUBLIC_IP (${INSTANCE_REF})..."
         INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
         set -x
-        exec ssh ${SSH_USER}@${PUBLIC_IP} -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} "$@";;
+        exec ssh ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} "$@";;
     status)
         if [ $# -gt 0 ]; then
             INSTANCE_REF="$1"; shift 1
@@ -159,6 +159,7 @@ case $subcommand in
         "$0" list | egrep "^$PREFIX" | sort >${EXISTING_MACHINES_FILE}
         EXISTING_MACHINES=$(cat ${EXISTING_MACHINES_FILE} | wc -l)
         echo "Existing: $EXISTING_MACHINES" >&2
+        cat $EXISTING_MACHINES_FILE
         MACHINES_TO_START=$((COUNT-EXISTING_MACHINES))
         echo "Machines to start: $MACHINES_TO_START" >&2
         if [ ${MACHINES_TO_START} -le 0 ]; then
