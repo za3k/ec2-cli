@@ -148,6 +148,39 @@ case $subcommand in
         INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
         PUBLIC_IP=$(aws ec2 describe-instances --instance-ids $INSTANCE_ID | jq -r '.Reservations[].Instances[].PublicIpAddress')
         echo $PUBLIC_IP;;
+    spinup)
+        if [ $# -gt 0 ]; then
+            COUNT="$1"; shift 1
+        else
+            usage; exit 1
+        fi
+        PREFIX=${1:-remotemachine-}; shift
+        EXISTING_MACHINES_FILE=$(mktemp)
+        "$0" list | egrep "^$PREFIX" | sort >${EXISTING_MACHINES_FILE}
+        EXISTING_MACHINES=$(cat ${EXISTING_MACHINES_FILE} | wc -l)
+        echo "Existing: $EXISTING_MACHINES" >&2
+        MACHINES_TO_START=$((COUNT-EXISTING_MACHINES))
+        echo "Machines to start: $MACHINES_TO_START" >&2
+        if [ ${MACHINES_TO_START} -le 0 ]; then
+            exit 0
+        fi
+        CANDIDATE_NAMES=$(mktemp) 
+        seq 1 ${COUNT} | while read i; do
+            echo "${PREFIX}${i}"
+        done | sort >${CANDIDATE_NAMES}
+        NAMES_TO_START=$(mktemp)
+        comm -1 -3 ${EXISTING_MACHINES_FILE} ${CANDIDATE_NAMES} | head -n ${MACHINES_TO_START} >${NAMES_TO_START}
+        cat ${NAMES_TO_START} | while read INSTANCE_NAME; do
+            echo "Starting: ${INSTANCE_NAME}" >&2
+            "$0" start "${INSTANCE_NAME}"
+        done
+        rm ${CANDIDATE_NAMES} ${EXISTING_MACHINES_FILE} ${NAMES_TO_START} # cleanup
+        ;;
+    spindown)
+        PREFIX=${1:-remotemachine}; shift
+        "$0" list | egrep "^$PREFIX" | while read INSTANCE_NAME; do
+            "$0" terminate "${INSTANCE_NAME}"
+        done;;
     help)
         usage; exit 0;;
     *)
