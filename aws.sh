@@ -150,13 +150,14 @@ case $subcommand in
         echo $PUBLIC_IP;;
     start-group) # GROUP COUNT
         if [ $# -gt 1 ]; then
-            PREFIX=$1
+            GROUP=$1
             COUNT=$2; shift 2
+            PREFIX=${GROUP}-
         else
             usage; exit 1
         fi
         EXISTING_MACHINES_FILE=$(mktemp)
-        "$0" list-group $PREFIX >${EXISTING_MACHINES_FILE}
+        "$0" list-group $GROUP >${EXISTING_MACHINES_FILE}
         EXISTING_MACHINES=$(cat ${EXISTING_MACHINES_FILE} | wc -l)
         echo "Existing: $EXISTING_MACHINES" >&2
         cat $EXISTING_MACHINES_FILE
@@ -179,19 +180,21 @@ case $subcommand in
         ;;
     list-group) # GROUP
         if [ $# -gt 0 ]; then
-            PREFIX=$1; shift 1
+            GROUP=$1; shift 1
+            PREFIX=${GROUP}-
         else
             usage; exit 1
         fi
         "$0" list | egrep "^$PREFIX" | sort;;
     parallel-credentials) # GROUP [PARALLEL_ARGS...]
         if [ $# -gt 0 ]; then
-            PREFIX=$1; shift 1
+            GROUP=$1; shift 1
+            PREFIX=${GROUP}-
         else
             usage; exit 1
         fi
         SSH_CREDENTIALS=$(mktemp)
-        "$0" list-group $PREFIX | while read INSTANCE_REF; do
+        "$0" list-group $GROUP | while read INSTANCE_REF; do
             INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
             PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" | jq -r '.Reservations[].Instances[].PublicIpAddress')
             INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
@@ -199,11 +202,12 @@ case $subcommand in
         done;;
     terminate-group|stop-group) # GROUP
         if [ $# -gt 0 ]; then
-            PREFIX=$1; shift 1
+            GROUP=${1}; shift 1
+            PREFIX=${GROUP}-
         else
             usage; exit 1
         fi
-        "$0" list-group $PREFIX | while read INSTANCE_NAME; do
+        "$0" list-group $GROUP | while read INSTANCE_NAME; do
             "$0" terminate "${INSTANCE_NAME}"
         done;;
     help)
