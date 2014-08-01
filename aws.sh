@@ -17,7 +17,7 @@ UBUNTU_IMAGE=$("$UBUNTU_AMI" trusty $ARCHITECTURE $REGION)
 IMAGE_ID=${IMAGE_ID:-$UBUNTU_IMAGE}
 
 usage() {
-    echo "$0 list|ssh|start|terminate|terminate-all|help"
+    echo "$0 list|ssh|start|terminate|terminate-all|start-group|terminate-group|list-group|help"
 }
 
 require_jq() {
@@ -184,7 +184,7 @@ case $subcommand in
             usage; exit 1
         fi
         "$0" list | egrep "^$PREFIX" | sort;;
-    parallel) # GROUP [PARALLEL_ARGS...]
+    parallel-credentials) # GROUP [PARALLEL_ARGS...]
         if [ $# -gt 0 ]; then
             PREFIX=$1; shift 1
         else
@@ -195,13 +195,9 @@ case $subcommand in
             INSTANCE_ID=$(find_instance_by_ref ${INSTANCE_REF})
             PUBLIC_IP=$(aws ec2 describe-instances --instance-ids "$INSTANCE_ID" | jq -r '.Reservations[].Instances[].PublicIpAddress')
             INSECURE_OPTIONS=(-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null)
-            echo ssh ${SSH_USER}@"${PUBLIC_IP}" -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]}
-        done >${SSH_CREDENTIALS}
-        echo "SSH CREDENTIALS"
-        cat ${SSH_CREDENTIALS}
-        parallel --sshloginfile "${SSH_CREDENTIALS}" "$@"
-        rm ${SSH_CREDENTIALS};;
-    stop-group) # GROUP
+            echo ssh -i ${KEY_LOCATION} ${INSECURE_OPTIONS[*]} ${SSH_USER}@"${PUBLIC_IP}"
+        done;;
+    terminate-group|stop-group) # GROUP
         if [ $# -gt 0 ]; then
             PREFIX=$1; shift 1
         else
